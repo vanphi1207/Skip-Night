@@ -57,12 +57,14 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
     private Map<String, String> messages;
     private List<String> voteStartedMessages;
     private List<String> blacklistedWorlds;
-    
+
     // Display settings
     private boolean useActionBar;
     private boolean useBossBar;
     private boolean useChat;
-    
+    private BarColor bossBarColor;
+    private BarStyle bossBarStyle;
+
     // Sound settings
     private Sound soundVoteStarted;
     private Sound soundVotedYes;
@@ -71,7 +73,7 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
     private Sound soundVoteFailed;
     private float soundVolume;
     private float soundPitch;
-    
+
     // Reward settings
     private boolean rewardsEnabled;
     private boolean rewardsOnlyOnSuccess;
@@ -122,25 +124,27 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
         voteCooldown = Math.max(0, config.getInt("vote-settings.vote-start-cooldown-seconds", 300)) * 1000L;
         nightStartTick = config.getLong("vote-settings.night-start-tick", 12541);
         nightEndTick = config.getLong("vote-settings.night-end-tick", 23458);
-        
+
         // Validate night ticks
         if (nightStartTick >= nightEndTick || nightStartTick < 0 || nightEndTick > 24000) {
             getLogger().warning("Invalid night tick configuration! Using defaults (12541-23458).");
             nightStartTick = 12541;
             nightEndTick = 23458;
         }
-        
+
         // Load blacklisted worlds (case-insensitive)
         blacklistedWorlds = config.getStringList("vote-settings.blacklisted-worlds");
         for (int i = 0; i < blacklistedWorlds.size(); i++) {
             blacklistedWorlds.set(i, blacklistedWorlds.get(i).toLowerCase());
         }
-        
+
         // Display settings
         useActionBar = config.getBoolean("display.use-action-bar", true);
         useBossBar = config.getBoolean("display.use-boss-bar", true);
         useChat = config.getBoolean("display.use-chat", true);
-        
+        bossBarColor = parseBossBarColor(config.getString("display.boss-bar-color", "YELLOW"));
+        bossBarStyle = parseBossBarStyle(config.getString("display.boss-bar-style", "SEGMENTED_10"));
+
         // Sound settings
         soundVoteStarted = parseSound(config.getString("sounds.vote-started", "BLOCK_NOTE_BLOCK_PLING"));
         soundVotedYes = parseSound(config.getString("sounds.player-voted-yes", "ENTITY_EXPERIENCE_ORB_PICKUP"));
@@ -149,13 +153,13 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
         soundVoteFailed = parseSound(config.getString("sounds.vote-failed", "ENTITY_VILLAGER_NO"));
         soundVolume = (float) config.getDouble("sounds.volume", 1.0);
         soundPitch = (float) config.getDouble("sounds.pitch", 1.0);
-        
+
         // Reward settings
         rewardsEnabled = config.getBoolean("rewards.enabled", true);
         rewardsOnlyOnSuccess = config.getBoolean("rewards.only-on-success", false);
         rewardXpLevels = config.getInt("rewards.xp-levels", 1);
         rewardMoney = config.getDouble("rewards.money", 0.0);
-        
+
         // Load reward items
         rewardItems = new ArrayList<>();
         if (config.isConfigurationSection("rewards.items") || config.isList("rewards.items")) {
@@ -194,7 +198,7 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
         }
         saveConfig();
     }
-    
+
     private Sound parseSound(String soundName) {
         if (soundName == null || soundName.trim().isEmpty()) {
             return null;
@@ -204,6 +208,24 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
         } catch (IllegalArgumentException e) {
             getLogger().warning("Invalid sound: " + soundName);
             return null;
+        }
+    }
+
+    private BarColor parseBossBarColor(String colorName) {
+        try {
+            return BarColor.valueOf(colorName.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException | NullPointerException e) {
+            getLogger().warning("Invalid display.boss-bar-color '" + colorName + "'. Using YELLOW.");
+            return BarColor.YELLOW;
+        }
+    }
+
+    private BarStyle parseBossBarStyle(String styleName) {
+        try {
+            return BarStyle.valueOf(styleName.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException | NullPointerException e) {
+            getLogger().warning("Invalid display.boss-bar-style '" + styleName + "'. Using SEGMENTED_10.");
+            return BarStyle.SEGMENTED_10;
         }
     }
 
@@ -266,7 +288,7 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
         if (command.getName().equalsIgnoreCase("skipnight") && args.length == 1) {
             List<String> completions = new ArrayList<>();
             String input = args[0].toLowerCase();
-            
+
             if (sender.hasPermission("skipnight.vote.yes") && "yes".startsWith(input)) {
                 completions.add("yes");
             }
@@ -288,7 +310,7 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
             if ("help".startsWith(input)) {
                 completions.add("help");
             }
-            
+
             return completions;
         }
         return null;
@@ -312,7 +334,7 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
             sender.sendMessage(colorize("&e/skipnight reload &7- Reload plugin configuration"));
         }
     }
-    
+
     private void handleVoteYes(CommandSender sender) {
         if (!(sender instanceof Player)) {
             sendMessageSafely(sender, "error-not-a-player");
@@ -323,7 +345,7 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
             sendMessageSafely(player, "no-permission");
             return;
         }
-        
+
         World world = player.getWorld();
         if (isWorldBlacklisted(world)) {
             sendMessageSafely(player, "error-world-blacklisted");
@@ -333,7 +355,7 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
             sendMessageSafely(player, "error-wrong-world");
             return;
         }
-        
+
         VoteSession session = activeVotes.get(world.getUID());
         if (session != null) {
             session.addVote(player, true, false);
@@ -341,7 +363,7 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
             startVoteAttempt(player);
         }
     }
-    
+
     private void handleVoteNo(CommandSender sender) {
         if (!(sender instanceof Player)) {
             sendMessageSafely(sender, "error-not-a-player");
@@ -352,12 +374,12 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
             sendMessageSafely(player, "no-permission");
             return;
         }
-        
+
         if (!allowVoteAgainst) {
             sendMessageSafely(player, "error-vote-against-disabled");
             return;
         }
-        
+
         World world = player.getWorld();
         if (isWorldBlacklisted(world)) {
             sendMessageSafely(player, "error-world-blacklisted");
@@ -367,7 +389,7 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
             sendMessageSafely(player, "error-wrong-world");
             return;
         }
-        
+
         VoteSession session = activeVotes.get(world.getUID());
         if (session != null) {
             session.addVote(player, false, false);
@@ -375,27 +397,27 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
             sendMessageSafely(player, "error-no-vote-in-progress");
         }
     }
-    
+
     private void handleCancelVote(CommandSender sender) {
         if (!sender.hasPermission("skipnight.cancel")) {
             sendMessageSafely(sender, "no-permission");
             return;
         }
-        
+
         if (!(sender instanceof Player)) {
             sendMessageSafely(sender, "error-not-a-player");
             return;
         }
-        
+
         Player player = (Player) sender;
         World world = player.getWorld();
         VoteSession session = activeVotes.get(world.getUID());
-        
+
         if (session == null) {
             sendMessageSafely(player, "error-no-vote-in-progress");
             return;
         }
-        
+
         session.cancelByAdmin();
     }
 
@@ -419,6 +441,9 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
             return;
         }
         loadConfigValues();
+        for (VoteSession session : activeVotes.values()) {
+            session.reloadBossBarSettings();
+        }
         sendMessageSafely(sender, "reload-success");
     }
 
@@ -647,15 +672,15 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
         }
         return colorize(message);
     }
-    
+
     // --- Helper method for playing sounds ---
-    
+
     private void playSound(Player player, Sound sound) {
         if (sound != null) {
             player.playSound(player.getLocation(), sound, soundVolume, soundPitch);
         }
     }
-    
+
     private void playSoundToWorld(World world, Sound sound) {
         if (sound != null) {
             for (Player p : world.getPlayers()) {
@@ -663,17 +688,17 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
             }
         }
     }
-    
+
     // --- Helper method for giving rewards ---
-    
+
     private void giveReward(Player player) {
         if (!rewardsEnabled) return;
-        
+
         // XP
         if (rewardXpLevels > 0) {
             player.giveExpLevels(rewardXpLevels);
         }
-        
+
         // Items
         for (RewardItem reward : rewardItems) {
             ItemStack item = new ItemStack(reward.material, reward.amount);
@@ -691,7 +716,7 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
             }
             player.getInventory().addItem(item);
         }
-        
+
         // Money (Vault integration - optional)
         if (rewardMoney > 0) {
             // Note: This requires Vault plugin - gracefully skip if not available
@@ -702,18 +727,18 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
             } catch (Exception ignored) {
             }
         }
-        
+
         sendMessageSafely(player, "reward-received");
     }
 
     // --- Inner Classes ---
-    
+
     private static class RewardItem {
         final Material material;
         final int amount;
         final String displayName;
         final List<String> lore;
-        
+
         RewardItem(Material material, int amount, String displayName, List<String> lore) {
             this.material = material;
             this.amount = amount;
@@ -737,23 +762,41 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
             if (initiator != null) {
                 yesVotes.add(initiator.getUniqueId());
             }
-            
-            // Create boss bar if enabled
-            if (useBossBar) {
-                bossBar = Bukkit.createBossBar(
-                    colorize("&eVote to Skip Night"),
-                    BarColor.YELLOW,
-                    BarStyle.SEGMENTED_10
-                );
-                for (Player p : world.getPlayers()) {
-                    bossBar.addPlayer(p);
+
+            configureBossBar();
+        }
+
+        private void configureBossBar() {
+            if (!useBossBar) {
+                if (bossBar != null) {
+                    bossBar.removeAll();
+                    bossBar = null;
                 }
+                return;
             }
+
+            if (bossBar == null) {
+                bossBar = Bukkit.createBossBar(
+                        colorize("&eVote to Skip Night"),
+                        bossBarColor,
+                        bossBarStyle
+                );
+                for (Player player : world.getPlayers()) {
+                    bossBar.addPlayer(player);
+                }
+            } else {
+                bossBar.setColor(bossBarColor);
+                bossBar.setStyle(bossBarStyle);
+            }
+        }
+
+        void reloadBossBarSettings() {
+            configureBossBar();
         }
 
         void start() {
             String prefix = messages.getOrDefault("prefix", "");
-            
+
             if (useChat && voteStartedMessages != null) {
                 for (String line : voteStartedMessages) {
                     if (line != null && !line.isEmpty()) {
@@ -767,9 +810,9 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
                 TextComponent yesButton = new TextComponent(formatMessage("vote-started-clickable-yes"));
                 yesButton.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/skipnight yes"));
                 yesButton.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new net.md_5.bungee.api.chat.hover.content.Text(colorize("&aClick to vote YES"))));
-                
+
                 TextComponent separator = new TextComponent("  ");
-                
+
                 TextComponent message;
                 if (allowVoteAgainst) {
                     TextComponent noButton = new TextComponent(formatMessage("vote-started-clickable-no"));
@@ -784,7 +827,7 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
                     p.spigot().sendMessage(message);
                 }
             }
-            
+
             // Play sound
             playSoundToWorld(world, soundVoteStarted);
 
@@ -806,12 +849,12 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
                 if (useChat && (timeLeft % 10 == 0 || timeLeft <= 5)) {
                     broadcast(formatMessage("time-remaining", "{time}", String.valueOf(timeLeft)));
                 }
-                
+
                 // Update boss bar
                 if (useBossBar && bossBar != null) {
                     double progress = Math.max(0.0, Math.min(1.0, (double) timeLeft / voteDuration));
                     bossBar.setProgress(progress);
-                    
+
                     int yesCount = (int) yesVotes.stream().filter(uuid -> {
                         Player p = Bukkit.getPlayer(uuid);
                         return p != null && p.getWorld().equals(world);
@@ -820,7 +863,7 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
                         Player p = Bukkit.getPlayer(uuid);
                         return p != null && p.getWorld().equals(world);
                     }).count();
-                    
+
                     String barTitle = colorize(String.format("&eYES: &a%d &7| NO: &c%d &7| Time: &6%ds", yesCount, noCount, timeLeft));
                     bossBar.setTitle(barTitle);
                 }
@@ -830,7 +873,7 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
                 timeLeft--;
             }, 20L, 20L);
         }
-        
+
         void cancelByAdmin() {
             if (useChat) {
                 broadcast(formatMessage("vote-cancelled"));
@@ -841,11 +884,11 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
         void notifyPlayerOnJoin(Player player) {
             if (useChat) {
                 sendMessageSafely(player, "vote-in-progress-on-join");
-                
+
                 TextComponent yesButton = new TextComponent(formatMessage("vote-started-clickable-yes"));
                 yesButton.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/skipnight yes"));
                 yesButton.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new net.md_5.bungee.api.chat.hover.content.Text(colorize("&aClick to vote YES"))));
-                
+
                 if (allowVoteAgainst) {
                     TextComponent separator = new TextComponent("  ");
                     TextComponent noButton = new TextComponent(formatMessage("vote-started-clickable-no"));
@@ -856,7 +899,7 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
                     player.spigot().sendMessage(yesButton);
                 }
             }
-            
+
             // Add to boss bar if it exists
             if (useBossBar && bossBar != null) {
                 bossBar.addPlayer(player);
@@ -865,13 +908,13 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
 
         void addVote(Player player, boolean voteYes, boolean fromBed) {
             UUID playerId = player.getUniqueId();
-            
+
             // Check if already voted
             if (yesVotes.contains(playerId) || noVotes.contains(playerId)) {
                 sendMessageSafely(player, "already-voted");
                 return;
             }
-            
+
             // Add vote
             if (voteYes) {
                 yesVotes.add(playerId);
@@ -886,7 +929,7 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
                 }
                 playSound(player, soundVotedNo);
             }
-            
+
             checkVotes(true);
         }
 
@@ -907,14 +950,14 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
                 Player p = Bukkit.getPlayer(uuid);
                 return p != null && p.getWorld().equals(world);
             }).count();
-            
+
             long noCount = noVotes.stream().filter(uuid -> {
                 Player p = Bukkit.getPlayer(uuid);
                 return p != null && p.getWorld().equals(world);
             }).count();
-            
+
             boolean passed = false;
-            
+
             if (thresholdMode.equals("absolute")) {
                 // Absolute mode: need X specific number of yes votes
                 passed = yesCount >= requiredAbsoluteCount;
@@ -923,7 +966,7 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
                 double currentPercentage = (double) yesCount * 100 / onlineInWorld;
                 passed = currentPercentage >= requiredPercentage;
             }
-            
+
             // Instant skip at 100%
             if (instantSkipAt100 && yesCount == onlineInWorld) {
                 passed = true;
@@ -970,7 +1013,7 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
                             "{percentage}", String.valueOf(requiredPercentage)
                     );
                 }
-                
+
                 if (useActionBar) {
                     // Send as action bar
                     for (Player p : playersInWorld) {
@@ -1017,13 +1060,13 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
             lore.add(colorize("&7YES Votes: &a" + yesCount));
             lore.add(colorize("&7NO Votes: &c" + noCount));
             lore.add(colorize("&7Total Players: &e" + playersInWorld.size()));
-            
+
             if (thresholdMode.equals("absolute")) {
                 lore.add(colorize("&7Required: &b" + requiredAbsoluteCount + " YES votes"));
             } else {
                 lore.add(colorize("&7Required: &b" + requiredPercentage + "%"));
             }
-            
+
             infoMeta.setLore(lore);
             infoItem.setItemMeta(infoMeta);
             voteGui.setItem(4, infoItem);
@@ -1032,14 +1075,14 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
                 ItemStack playerHead = new ItemStack(Material.PLAYER_HEAD, 1);
                 SkullMeta skullMeta = (SkullMeta) playerHead.getItemMeta();
                 skullMeta.setOwningPlayer(p);
-                
+
                 UUID playerId = p.getUniqueId();
                 boolean votedYes = yesVotes.contains(playerId);
                 boolean votedNo = noVotes.contains(playerId);
-                
+
                 String displayName;
                 String voteLore;
-                
+
                 if (votedYes) {
                     displayName = colorize("&a" + p.getName());
                     voteLore = formatMessage("gui-voter-yes");
@@ -1050,7 +1093,7 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
                     displayName = colorize("&7" + p.getName());
                     voteLore = formatMessage("gui-voter-abstain");
                 }
-                
+
                 skullMeta.setDisplayName(displayName);
                 List<String> skullLore = new ArrayList<>();
                 if (voteLore != null) {
@@ -1068,7 +1111,7 @@ public final class SkipNight extends JavaPlugin implements Listener, TabExecutor
             if (voteGui != null) {
                 new ArrayList<>(voteGui.getViewers()).forEach(human -> human.closeInventory());
             }
-            
+
             // Clean up boss bar
             if (bossBar != null) {
                 bossBar.removeAll();

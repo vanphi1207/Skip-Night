@@ -3,7 +3,7 @@ name: SkipNight
 # The main class that Spigot will load.
 main: me.bebo.skipNight.SkipNight
 # The version of your plugin. It's good practice to update this with new features.
-version: '2.0'
+version: '2.1'
 # The Spigot API version this plugin is built against. 1.16 provides broad compatibility.
 api-version: '1.16'
 # Your name.

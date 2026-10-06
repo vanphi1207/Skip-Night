@@ -36,6 +36,10 @@ display:
   use-action-bar: true
   # Show timer as boss bar at top of screen
   use-boss-bar: true
+  # Boss bar color: PINK, BLUE, RED, GREEN, YELLOW, PURPLE, or WHITE
+  boss-bar-color: "RED"
+  # Boss bar style/type: SOLID, SEGMENTED_6, SEGMENTED_10, SEGMENTED_12, or SEGMENTED_20
+  boss-bar-style: "SEGMENTED_10"
   # Still send messages to chat
   use-chat: true
 
@@ -67,8 +71,8 @@ rewards:
       lore:
         - "&7Thanks for participating!"
         - "&7in the night skip vote!"
-#    - material: "EMERALD"
-#      amount: 5
+  #    - material: "EMERALD"
+  #      amount: 5
   
   # Economy reward (requires Vault + economy plugin like EssentialsX)
   # Set to 0 to disable
